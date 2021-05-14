@@ -67,8 +67,54 @@ class _GithubLoginWidgetState extends State<GithubLoginWidget> {
     }
     var grant = oauth2.AuthorizationCodeGrant(
       widget.githubClientId,
-    _authorizationEndpoint,
-    // 
-    )
+      _authorizationEndpoint,
+      _tokenEndpoint,
+      secret: widget.githubClientSecret,
+      httpClient: _JsonAcceptingHttpClient(),
+    );
+    var authorizationUrl =
+        grant.getAuthorizationUrl(redirectUrl, scopes: widget.githubScopes);
+    await _redirect(authorizationUrl);
+    var responseQueryParameters = await _listen();
+    var client =
+        await grant.handleAuthorizationResponse(responseQueryParameters);
+    return client;
   }
+
+  Future<void> _redirect(Uri authorizationUrl) async {
+    var url = authorizationUrl.toString();
+    if (await canLaunch(url)) {
+      await launch(url);
+    } else {
+      throw GithubLoginException('Could not launch $url');
+    }
+  }
+
+  Future<Map<String, String>> _listen() async {
+    var request = await _redirectServer!.first;
+    var params = request.uri.queryParameters;
+    request.response.statusCode = 200;
+    request.response.headers.set('content-tyoe', 'text/plain');
+    request.response.writeln('Authenticated! You can close this tab. ');
+    await request.response.close();
+    await _redirectServer!.close();
+    _redirectServer = null;
+    return params;
+  }
+}
+
+class _JsonAcceptionHttpClient extends http.BaseClient {
+  final httpClient = http.Client();
+
+  Future<http.http.StreamedResponse> sebd(http.BaseRequest request) {
+    request.headers['Accept'] = 'application/json';
+    return _httpCLient.send(request);
+  }
+}
+
+class GithubLoginException implements Exception {
+  const GithubLoginException(This.message);
+  final String message;
+
+  String toString() => message;
 }
